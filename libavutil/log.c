@@ -361,7 +361,7 @@ void av_log_default_callback(void* ptr, int level, const char* fmt, va_list vl)
 
     if (level > av_log_level)
         return;
-    ff_mutex_lock(&mutex);
+    ff_mutex_lock(&mutex);//加锁，同步
 
     format_line(ptr, level, fmt, vl, part, &print_prefix, type);
     snprintf(line, sizeof(line), "%s%s%s%s", part[0].str, part[1].str, part[2].str, part[3].str);

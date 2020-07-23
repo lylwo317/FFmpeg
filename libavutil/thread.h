@@ -147,9 +147,9 @@ static inline int strict_pthread_once(pthread_once_t *once_control, void (*init_
 #endif
 
 #define AVMutex pthread_mutex_t
-#define AV_MUTEX_INITIALIZER PTHREAD_MUTEX_INITIALIZER
+#define AV_MUTEX_INITIALIZER PTHREAD_MUTEX_INITIALIZER //全局变量mutex初始化，本质就是struct结构体的“{}”初始化
 
-#define ff_mutex_init    pthread_mutex_init
+#define ff_mutex_init    pthread_mutex_init//局部变量使用来初始后mutex的函数
 #define ff_mutex_lock    pthread_mutex_lock
 #define ff_mutex_unlock  pthread_mutex_unlock
 #define ff_mutex_destroy pthread_mutex_destroy

@@ -694,7 +694,7 @@ static void frame_queue_unref_item(Frame *vp)
 static int frame_queue_init(FrameQueue *f, PacketQueue *pktq, int max_size, int keep_last)
 {
     int i;
-    memset(f, 0, sizeof(FrameQueue));
+    memset(f, 0, sizeof(FrameQueue));//填0
     if (!(f->mutex = SDL_CreateMutex())) {
         av_log(NULL, AV_LOG_FATAL, "SDL_CreateMutex(): %s\n", SDL_GetError());
         return AVERROR(ENOMEM);
@@ -3548,7 +3548,7 @@ static void opt_input_file(void *optctx, const char *filename)
         av_log(NULL, AV_LOG_FATAL,
                "Argument '%s' provided as input filename, but '%s' was already specified.\n",
                 filename, input_filename);
-        exit(1);
+        exit(1);//指定了两个文件就提示这个
     }
     if (!strcmp(filename, "-"))
         filename = "pipe:";
@@ -3725,20 +3725,20 @@ int main(int argc, char **argv)
     }
     if (display_disable)
         flags &= ~SDL_INIT_VIDEO;
-    if (SDL_Init (flags)) {
+    if (SDL_Init (flags)) {//初始化 video，audio，timer
         av_log(NULL, AV_LOG_FATAL, "Could not initialize SDL - %s\n", SDL_GetError());
         av_log(NULL, AV_LOG_FATAL, "(Did you set the DISPLAY variable?)\n");
         exit(1);
     }
 
-    SDL_EventState(SDL_SYSWMEVENT, SDL_IGNORE);
-    SDL_EventState(SDL_USEREVENT, SDL_IGNORE);
+    SDL_EventState(SDL_SYSWMEVENT, SDL_IGNORE);//忽略事件
+    SDL_EventState(SDL_USEREVENT, SDL_IGNORE); //忽略事件
 
     av_init_packet(&flush_pkt);
     flush_pkt.data = (uint8_t *)&flush_pkt;
 
     if (!display_disable) {
-        int flags = SDL_WINDOW_HIDDEN;
+        int flags = SDL_WINDOW_HIDDEN;//隐藏窗口
         if (alwaysontop)
 #if SDL_VERSION_ATLEAST(2,0,5)
             flags |= SDL_WINDOW_ALWAYS_ON_TOP;
@@ -3748,7 +3748,7 @@ int main(int argc, char **argv)
         if (borderless)
             flags |= SDL_WINDOW_BORDERLESS;
         else
-            flags |= SDL_WINDOW_RESIZABLE;
+            flags |= SDL_WINDOW_RESIZABLE;//窗口可以调整大小
         window = SDL_CreateWindow(program_name, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, default_width, default_height, flags);
         SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "linear");
         if (window) {

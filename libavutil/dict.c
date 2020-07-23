@@ -70,7 +70,7 @@ AVDictionaryEntry *av_dict_get(const AVDictionary *m, const char *key,
 int av_dict_set(AVDictionary **pm, const char *key, const char *value,
                 int flags)
 {
-    AVDictionary *m = *pm;
+    AVDictionary *m = *pm;//获取地址
     AVDictionaryEntry *tag = NULL;
     char *oldval = NULL, *copy_key = NULL, *copy_value = NULL;
 
@@ -86,7 +86,7 @@ int av_dict_set(AVDictionary **pm, const char *key, const char *value,
     else if (copy_key)
         copy_value = av_strdup(value);
     if (!m)
-        m = *pm = av_mallocz(sizeof(*m));
+        m = *pm = av_mallocz(sizeof(*m));//m为null，说明AVDictionary对象还没在堆创建过
     if (!m || (key && !copy_key) || (value && !copy_value))
         goto err_out;
 

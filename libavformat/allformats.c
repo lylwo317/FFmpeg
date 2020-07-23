@@ -561,16 +561,16 @@ static void av_format_init_next(void)
     AVOutputFormat *prevout = NULL, *out;
     AVInputFormat *previn = NULL, *in;
 
-    ff_mutex_lock(&avpriv_register_devices_mutex);
+    ff_mutex_lock(&avpriv_register_devices_mutex);//获取lock
 
-    for (int i = 0; (out = (AVOutputFormat*)muxer_list[i]); i++) {
+    for (int i = 0; (out = (AVOutputFormat*)muxer_list[i]); i++) {//将muxer_list转成链表
         if (prevout)
             prevout->next = out;
         prevout = out;
     }
 
     if (outdev_list) {
-        for (int i = 0; (out = (AVOutputFormat*)outdev_list[i]); i++) {
+        for (int i = 0; (out = (AVOutputFormat*)outdev_list[i]); i++) {//将outdev_list转成链表
             if (prevout)
                 prevout->next = out;
             prevout = out;
@@ -591,7 +591,7 @@ static void av_format_init_next(void)
         }
     }
 
-    ff_mutex_unlock(&avpriv_register_devices_mutex);
+    ff_mutex_unlock(&avpriv_register_devices_mutex);//释放lock
 }
 
 AVInputFormat *av_iformat_next(const AVInputFormat *f)
@@ -650,6 +650,6 @@ void avpriv_register_devices(const AVOutputFormat * const o[], const AVInputForm
     indev_list = i;
     ff_mutex_unlock(&avpriv_register_devices_mutex);
 #if FF_API_NEXT
-    av_format_init_next();
+    av_format_init_next();//初始化next指针，使得可以以链表的方式使用
 #endif
 }

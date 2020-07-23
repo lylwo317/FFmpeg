@@ -81,7 +81,7 @@ enum show_muxdemuxers {
 
 void init_opts(void)
 {
-    av_dict_set(&sws_dict, "flags", "bicubic", 0);
+    av_dict_set(&sws_dict, "flags", "bicubic", 0);//第一个参数相当于传输指针变量的地址
 }
 
 void uninit_opts(void)
@@ -503,7 +503,7 @@ static void check_options(const OptionDef *po)
 
 void parse_loglevel(int argc, char **argv, const OptionDef *options)
 {
-    int idx = locate_option(argc, argv, options, "loglevel");
+    int idx = locate_option(argc, argv, options, "loglevel");//定位loglevel选项位置，如果有在命令行设置，就会返回非0（index）
     const char *env;
 
     check_options(options);

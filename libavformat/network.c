@@ -60,7 +60,7 @@ int ff_network_init(void)
 #if HAVE_WINSOCK2_H
     WSADATA wsaData;
 
-    if (WSAStartup(MAKEWORD(1,1), &wsaData))
+    if (WSAStartup(MAKEWORD(1,1), &wsaData))//在windows运行时加载socket dll
         return 0;
 #endif
     return 1;
