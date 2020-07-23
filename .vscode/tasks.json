@@ -1,0 +1,47 @@
+{
+  "version": "2.0.0",
+    "tasks": [
+      {
+        "label": "configure",
+        "type": "shell",
+        "command": "./configure --enable-debug --disable-optimizations --disable-asm --disable-stripping",
+        "presentation": {
+          "echo": false,
+          "reveal": "silent",
+          "showReuseMessage": false
+        },
+        "problemMatcher": "$gcc",
+      },
+      {
+        "label": "build",
+        "type": "shell",
+        "command": "make -j$((`nproc`+1))",
+        "presentation": {
+          "echo": false,
+          "reveal": "silent",
+          "showReuseMessage": false
+        },
+        "problemMatcher": "$gcc",
+        "group": {
+          "kind": "build",
+          "isDefault": true
+        },
+      },
+      {
+        "label": "run",
+        "type": "shell",
+        "dependsOn": "build",
+        "command": "${workspaceFolder}/ffplay",
+        "args": [
+          "/home/kevin/Videos/shenqi.mp4"
+        ],
+        "presentation": {
+          "focus": true
+        },
+        "group": {
+          "kind": "test",
+          "isDefault": true
+        }
+      }
+    ]
+}
