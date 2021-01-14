@@ -16,17 +16,17 @@ export LC_ALL
 
 try_exec(){
     echo "Trying shell $1"
-    type "$1" > /dev/null 2>&1 && exec "$@"
+    type "$1" > /dev/null 2>&1 && exec "$@"#type检测命令是否存在
 }
 
 unset foo
-(: ${foo%%bar}) 2> /dev/null
+(: ${foo%%bar}) 2> /dev/null #把错误输出重定向到/dev/null， ()表示fork子进程来执行（subshell执行）
 E1="$?"
 
 (: ${foo?}) 2> /dev/null
 E2="$?"
 
-if test "$E1" != 0 || test "$E2" = 0; then
+if test "$E1" != 0 || test "$E2" = 0; then #测试命令执行结果
     echo "Broken shell detected.  Trying alternatives."
     export FF_CONF_EXEC
     if test "0$FF_CONF_EXEC" -lt 1; then
@@ -495,8 +495,8 @@ EOF
   exit 0
 }
 
-if test -t 1 && which tput >/dev/null 2>&1; then
-    ncolors=$(tput colors)
+if test -t 1 && which tput >/dev/null 2>&1; then #如果1(标准输出)已经开启，并且存在tput命令
+    ncolors=$(tput colors) #256
     if test -n "$ncolors" && test $ncolors -ge 8; then
         bold_color=$(tput bold)
         warn_color=$(tput setaf 3)
@@ -3854,10 +3854,11 @@ else
     test -e "$source_path/config.h" &&
         die "Out of tree builds are impossible with config.h in source dir."
 fi
-
+# 删*=除最短匹配，也就是把第一个等号前的字符都删除，相当于获取等号右边的值。# 从头部开始匹配
+# 删除等号右边的字符。 %从尾部开始匹配
 for v in "$@"; do
     r=${v#*=}
-    l=${v%"$r"}
+    l=${v%"$r"} 
     r=$(sh_quote "$r")
     FFMPEG_CONFIGURATION="${FFMPEG_CONFIGURATION# } ${l}${r}"
 done
@@ -3876,6 +3877,7 @@ find_filters_extern(){
 }
 
 FILTER_LIST=$(find_filters_extern libavfilter/allfilters.c)
+echo ${FILTER_LIST}
 OUTDEV_LIST=$(find_things_extern muxer AVOutputFormat libavdevice/alldevices.c outdev)
 INDEV_LIST=$(find_things_extern demuxer AVInputFormat libavdevice/alldevices.c indev)
 MUXER_LIST=$(find_things_extern muxer AVOutputFormat libavformat/allformats.c)
@@ -4378,7 +4380,7 @@ FFTMPDIR=$(mktemp -d "${TMPDIR}/ffconf.XXXXXXXX" 2> /dev/null) ||
 
 tmpfile(){
     tmp="${FFTMPDIR}/test"$2
-    (set -C; exec > $tmp) 2> /dev/null ||
+    (set -C; exec > $tmp) 2> /dev/null || #set -C 阻止重定向输出写入到已经存在的文件，也就是说只允许写入到新文件中, exec > file == exec 1 > file 重定向标准输出，并且创建file
         die "Unable to create temporary file in $FFTMPDIR."
     eval $1=$tmp
 }
@@ -4398,7 +4400,7 @@ tmpfile TMPS   .S
 tmpfile TMPSH  .sh
 tmpfile TMPV   .ver
 
-unset -f mktemp
+unset -f mktemp #复位方法（-f指示方法）
 
 chmod +x $TMPE
 
@@ -5216,11 +5218,11 @@ if [ "$cpu" != generic ]; then
     test "$cc_type" = "$ld_type" && add_ldflags $cpuflags
 fi
 
-# compiler sanity check
+# compiler sanity check 尝试编译，检查编译器
 test_exec <<EOF
 int main(void){ return 0; }
 EOF
-if test "$?" != 0; then
+if test "$?" != 0; then #编译出错
     echo "$cc is unable to create an executable file."
     if test -z "$cross_prefix" && ! enabled cross_compile ; then
         echo "If $cc is a cross-compiler, use the --enable-cross-compile option."
@@ -5231,7 +5233,7 @@ fi
 
 add_cppflags -D_ISOC99_SOURCE
 add_cxxflags -D__STDC_CONSTANT_MACROS
-check_cxxflags -std=c++11 || check_cxxflags -std=c++0x
+check_cxxflags -std=c++11 || check_cxxflags -std=c++0x #通过编译临时目录下的临时文件来测试flags有效性
 
 # some compilers silently accept -std=c11, so we also need to check that the
 # version macro is defined properly

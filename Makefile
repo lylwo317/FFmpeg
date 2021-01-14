@@ -1,7 +1,7 @@
 MAIN_MAKEFILE=1
-include ffbuild/config.mak
+include ffbuild/config.mak #将ffbuild/config.mak在此处展开
 
-vpath %.c    $(SRC_PATH)
+vpath %.c    $(SRC_PATH) #如果%.c文件不能在当前目录下找到，就会到$(SRC_PATH)下搜索%.c
 vpath %.cpp  $(SRC_PATH)
 vpath %.h    $(SRC_PATH)
 vpath %.inc  $(SRC_PATH)
@@ -15,10 +15,12 @@ vpath %.cu   $(SRC_PATH)
 vpath %.ptx  $(SRC_PATH)
 vpath %/fate_config.sh.template $(SRC_PATH)
 
+# = 与 :=区别在于展开的时机不同，:=立即展开，=在使用的时候展开
 TESTTOOLS   = audiogen videogen rotozoom tiny_psnr tiny_ssim base64 audiomatch
 HOSTPROGS  := $(TESTTOOLS:%=tests/%) doc/print_options
 
 # $(FFLIBS-yes) needs to be in linking order
+# $(CONFIG_xxxxx)在configure运行的时候生成到ffbuild/config.mak，然后如果enable，就yes，否则就no
 FFLIBS-$(CONFIG_AVDEVICE)   += avdevice
 FFLIBS-$(CONFIG_AVFILTER)   += avfilter
 FFLIBS-$(CONFIG_AVFORMAT)   += avformat

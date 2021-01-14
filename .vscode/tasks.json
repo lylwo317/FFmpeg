@@ -4,7 +4,7 @@
       {
         "label": "configure",
         "type": "shell",
-        "command": "./configure --enable-debug --disable-optimizations --disable-asm --disable-stripping",
+        "command": "./configure --enable-debug --disable-optimizations --disable-asm --disable-stripping --enable-shared --enable-rpath --prefix=/home/kevin/CLionProjects/FFmpeg/out",
         "presentation": {
           "echo": false,
           "reveal": "silent",
@@ -15,6 +15,7 @@
       {
         "label": "build",
         "type": "shell",
+        /* 编译lib是的时候要记得 make install 把库安装到 out/lib 目录*/
         "command": "make -j$((`nproc`+1))",
         "presentation": {
           "echo": false,
