@@ -62,11 +62,11 @@
 #include <assert.h>
 
 const char program_name[] = "ffplay";
-const int program_birth_year = 2003;
+const int program_birth_year = 2003;//程序创建的日期
 
 #define MAX_QUEUE_SIZE (15 * 1024 * 1024)
 #define MIN_FRAMES 25
-#define EXTERNAL_CLOCK_MIN_FRAMES 2
+#define EXTERNAL_CLOCK_MIN_FRAMES 2//外部时钟
 #define EXTERNAL_CLOCK_MAX_FRAMES 10
 
 /* Minimum SDL audio buffer size, in samples. */
@@ -110,7 +110,7 @@ const int program_birth_year = 2003;
 
 static unsigned sws_flags = SWS_BICUBIC;
 
-typedef struct MyAVPacketList {
+typedef struct MyAVPacketList {//链表
     AVPacket pkt;
     struct MyAVPacketList *next;
     int serial;
@@ -141,7 +141,7 @@ typedef struct AudioParams {
     int bytes_per_sec;
 } AudioParams;
 
-typedef struct Clock {
+typedef struct Clock {//时钟
     double pts;           /* clock base */
     double pts_drift;     /* clock base minus time at which we updated the clock */
     double last_updated;
@@ -202,7 +202,7 @@ typedef struct Decoder {
 } Decoder;
 
 typedef struct VideoState {
-    SDL_Thread *read_tid;
+    SDL_Thread *read_tid;//read_thread_pointer。读取线程
     AVInputFormat *iformat;
     int abort_request;
     int force_refresh;
@@ -217,17 +217,17 @@ typedef struct VideoState {
     AVFormatContext *ic;
     int realtime;
 
-    Clock audclk;
-    Clock vidclk;
-    Clock extclk;
+    Clock audclk;//音频时钟
+    Clock vidclk;//视频时钟
+    Clock extclk;//外部时钟
 
-    FrameQueue pictq;
-    FrameQueue subpq;
-    FrameQueue sampq;
+    FrameQueue pictq;//图像队列
+    FrameQueue subpq;//字幕队列
+    FrameQueue sampq;//音频队列
 
     Decoder auddec;
     Decoder viddec;
-    Decoder subdec;
+    Decoder subdec;//字幕
 
     int audio_stream;
 
@@ -695,11 +695,11 @@ static int frame_queue_init(FrameQueue *f, PacketQueue *pktq, int max_size, int 
 {
     int i;
     memset(f, 0, sizeof(FrameQueue));//填0
-    if (!(f->mutex = SDL_CreateMutex())) {
+    if (!(f->mutex = SDL_CreateMutex())) {//创建mutex
         av_log(NULL, AV_LOG_FATAL, "SDL_CreateMutex(): %s\n", SDL_GetError());
         return AVERROR(ENOMEM);
     }
-    if (!(f->cond = SDL_CreateCond())) {
+    if (!(f->cond = SDL_CreateCond())) {//创建condition
         av_log(NULL, AV_LOG_FATAL, "SDL_CreateCond(): %s\n", SDL_GetError());
         return AVERROR(ENOMEM);
     }
@@ -1391,7 +1391,7 @@ static void set_clock_at(Clock *c, double pts, int serial, double time)
 {
     c->pts = pts;
     c->last_updated = time;
-    c->pts_drift = c->pts - time;
+    c->pts_drift = c->pts - time;//计算时间差(pts - 系统时间)
     c->serial = serial;
 }
 
@@ -3077,7 +3077,7 @@ static VideoState *stream_open(const char *filename, AVInputFormat *iformat)
 {
     VideoState *is;
 
-    is = av_mallocz(sizeof(VideoState));
+    is = av_mallocz(sizeof(VideoState));//创建并初始化0
     if (!is)
         return NULL;
     is->last_video_stream = is->video_stream = -1;
@@ -3112,14 +3112,14 @@ static VideoState *stream_open(const char *filename, AVInputFormat *iformat)
     init_clock(&is->audclk, &is->audioq.serial);
     init_clock(&is->extclk, &is->extclk.serial);
     is->audio_clock_serial = -1;
-    if (startup_volume < 0)
+    if (startup_volume < 0)//起始音量 < 0。会被设置为0
         av_log(NULL, AV_LOG_WARNING, "-volume=%d < 0, setting to 0\n", startup_volume);
-    if (startup_volume > 100)
+    if (startup_volume > 100)//>100, 会被设置为100
         av_log(NULL, AV_LOG_WARNING, "-volume=%d > 100, setting to 100\n", startup_volume);
     startup_volume = av_clip(startup_volume, 0, 100);
     startup_volume = av_clip(SDL_MIX_MAXVOLUME * startup_volume / 100, 0, SDL_MIX_MAXVOLUME);
     is->audio_volume = startup_volume;
-    is->muted = 0;
+    is->muted = 0;//不静音
     is->av_sync_type = av_sync_type;
     is->read_tid     = SDL_CreateThread(read_thread, "read_thread", is);
     if (!is->read_tid) {
@@ -3232,6 +3232,7 @@ static void refresh_loop_wait_event(VideoState *is, SDL_Event *event) {
     double remaining_time = 0.0;
     SDL_PumpEvents();
     while (!SDL_PeepEvents(event, 1, SDL_GETEVENT, SDL_FIRSTEVENT, SDL_LASTEVENT)) {
+        //没有SDL事件
         if (!cursor_hidden && av_gettime_relative() - cursor_last_shown > CURSOR_HIDE_DELAY) {
             SDL_ShowCursor(0);
             cursor_hidden = 1;
@@ -3696,7 +3697,7 @@ int main(int argc, char **argv)
 
     init_opts();
 
-    signal(SIGINT , sigterm_handler); /* Interrupt (ANSI).    */
+    signal(SIGINT , sigterm_handler); /* Interrupt (ANSI).    */ /*ctrl+c*/
     signal(SIGTERM, sigterm_handler); /* Termination (ANSI).  */
 
     show_banner(argc, argv, options);
@@ -3734,18 +3735,18 @@ int main(int argc, char **argv)
     SDL_EventState(SDL_SYSWMEVENT, SDL_IGNORE);//忽略事件
     SDL_EventState(SDL_USEREVENT, SDL_IGNORE); //忽略事件
 
-    av_init_packet(&flush_pkt);
-    flush_pkt.data = (uint8_t *)&flush_pkt;
+    av_init_packet(&flush_pkt);//初始化flush_pkt
+    flush_pkt.data = (uint8_t *)&flush_pkt;//data指针指向自身
 
     if (!display_disable) {
         int flags = SDL_WINDOW_HIDDEN;//隐藏窗口
-        if (alwaysontop)
+        if (alwaysontop)//窗口总是在顶部
 #if SDL_VERSION_ATLEAST(2,0,5)
             flags |= SDL_WINDOW_ALWAYS_ON_TOP;
 #else
             av_log(NULL, AV_LOG_WARNING, "Your SDL version doesn't support SDL_WINDOW_ALWAYS_ON_TOP. Feature will be inactive.\n");
 #endif
-        if (borderless)
+        if (borderless)//无边框
             flags |= SDL_WINDOW_BORDERLESS;
         else
             flags |= SDL_WINDOW_RESIZABLE;//窗口可以调整大小

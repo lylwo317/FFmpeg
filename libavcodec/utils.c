@@ -928,7 +928,7 @@ FF_ENABLE_DEPRECATION_WARNINGS
 
     if (   avctx->codec->init && (!(avctx->active_thread_type&FF_THREAD_FRAME)
         || avci->frame_thread_encoder)) {
-        ret = avctx->codec->init(avctx);
+        ret = avctx->codec->init(avctx);//初始化解码器
         if (ret < 0) {
             goto free_and_end;
         }

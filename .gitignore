@@ -41,3 +41,11 @@
 /.idea
 compile_commands.json
 out/
+FFmpeg.cflags
+FFmpeg.config
+FFmpeg.creator
+FFmpeg.creator.user
+FFmpeg.cxxflags
+FFmpeg.files
+FFmpeg.includes
+debugconfigure.txt
