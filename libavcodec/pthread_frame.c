@@ -792,7 +792,7 @@ int ff_frame_thread_init(AVCodecContext *avctx)
     if (codec->type == AVMEDIA_TYPE_VIDEO)
         avctx->delay = src->thread_count - 1;
 
-    for (i = 0; i < thread_count; i++) {
+    for (i = 0; i < thread_count; i++) {//创建thread_count个解码线程
         AVCodecContext *copy = av_malloc(sizeof(AVCodecContext));
         PerThreadContext *p  = &fctx->threads[i];
 
@@ -859,7 +859,7 @@ int ff_frame_thread_init(AVCodecContext *avctx)
 
         atomic_init(&p->debug_threads, (copy->debug & FF_DEBUG_THREADS) != 0);
 
-        err = AVERROR(pthread_create(&p->thread, NULL, frame_worker_thread, p));
+        err = AVERROR(pthread_create(&p->thread, NULL, frame_worker_thread, p));//创建线程
         p->thread_init= !err;
         if(!p->thread_init)
             goto error;

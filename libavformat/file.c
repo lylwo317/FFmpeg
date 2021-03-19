@@ -214,7 +214,7 @@ static int file_open(URLContext *h, const char *filename, int flags)
 
     av_strstart(filename, "file:", &filename);
 
-    if (flags & AVIO_FLAG_WRITE && flags & AVIO_FLAG_READ) {
+    if (flags & AVIO_FLAG_WRITE && flags & AVIO_FLAG_READ) {//可读并且可写
         access = O_CREAT | O_RDWR;
         if (c->trunc)
             access |= O_TRUNC;
@@ -223,7 +223,7 @@ static int file_open(URLContext *h, const char *filename, int flags)
         if (c->trunc)
             access |= O_TRUNC;
     } else {
-        access = O_RDONLY;
+        access = O_RDONLY;//只读
     }
 #ifdef O_BINARY
     access |= O_BINARY;
@@ -232,16 +232,16 @@ static int file_open(URLContext *h, const char *filename, int flags)
     if (fd == -1)
         return AVERROR(errno);
     c->fd = fd;
-
+    //是不是流式的，如果是，就不能seek
     h->is_streamed = !fstat(fd, &st) && S_ISFIFO(st.st_mode);
 
     /* Buffer writes more than the default 32k to improve throughput especially
      * with networked file systems */
-    if (!h->is_streamed && flags & AVIO_FLAG_WRITE)
+    if (!h->is_streamed && flags & AVIO_FLAG_WRITE)//非流式，并且可写
         h->min_packet_size = h->max_packet_size = 262144;
 
     if (c->seekable >= 0)
-        h->is_streamed = !c->seekable;
+        h->is_streamed = !c->seekable;//两者互斥，这里当设置了seekable的值的时候，根据seekable来更正is_streamed
 
     return 0;
 }

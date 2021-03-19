@@ -82,9 +82,11 @@ static int url_alloc_for_protocol(URLContext **puc, const URLProtocol *up,
     int err;
 
 #if CONFIG_NETWORK
+    //该协议需要网络的话，就调用ff_network_init初始化网络
     if (up->flags & URL_PROTOCOL_FLAG_NETWORK && !ff_network_init())
         return AVERROR(EIO);
 #endif
+    //url_read == NULL
     if ((flags & AVIO_FLAG_READ) && !up->url_read) {
         av_log(NULL, AV_LOG_ERROR,
                "Impossible to open the '%s' protocol for reading\n", up->name);
@@ -101,7 +103,7 @@ static int url_alloc_for_protocol(URLContext **puc, const URLProtocol *up,
         goto fail;
     }
     uc->av_class = &ffurl_context_class;
-    uc->filename = (char *)&uc[1];
+    uc->filename = (char *)&uc[1];//将uc后面的地址赋值给uc->filename
     strcpy(uc->filename, filename);
     uc->prot            = up;
     uc->flags           = flags;
@@ -213,6 +215,7 @@ int ffurl_connect(URLContext *uc, AVDictionary **options)
                                                   options) :
         uc->prot->url_open(uc, uc->filename, uc->flags);
 
+    //设置protocol_whitelist 对应的value为null
     av_dict_set(options, "protocol_whitelist", NULL, 0);
     av_dict_set(options, "protocol_blacklist", NULL, 0);
 
@@ -256,6 +259,7 @@ static const struct URLProtocol *url_find_protocol(const char *filename)
 {
     const URLProtocol **protocols;
     char proto_str[128], proto_nested[128], *ptr;
+    //过滤出:前面的例如http,file
     size_t proto_len = strspn(filename, URL_SCHEME_CHARS);
     int i;
 
@@ -299,6 +303,7 @@ int ffurl_alloc(URLContext **puc, const char *filename, int flags,
 {
     const URLProtocol *p = NULL;
 
+    //查找协议
     p = url_find_protocol(filename);
     if (p)
        return url_alloc_for_protocol(puc, p, filename, flags, int_cb);
@@ -345,6 +350,7 @@ int ffurl_open_whitelist(URLContext **puc, const char *filename, int flags,
     if ((ret = av_opt_set_dict(*puc, options)) < 0)
         goto fail;
 
+    //连接url。对文件，就是打开文件，对于http有可能会阻塞
     ret = ffurl_connect(*puc, options);
 
     if (!ret)

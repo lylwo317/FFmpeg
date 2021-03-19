@@ -261,6 +261,7 @@ typedef struct VideoState {
 
     enum ShowMode {
         SHOW_MODE_NONE = -1, SHOW_MODE_VIDEO = 0, SHOW_MODE_WAVES, SHOW_MODE_RDFT, SHOW_MODE_NB
+        //0.正常播放 1.显示波形 2.显示频谱
     } show_mode;
     int16_t sample_array[SAMPLE_ARRAY_SIZE];
     int sample_array_index;
@@ -1299,6 +1300,10 @@ static void stream_close(VideoState *is)
     av_free(is);
 }
 
+/**
+ * 退出前，对已经创建的对象进行销毁
+ * @param is
+ */
 static void do_exit(VideoState *is)
 {
     if (is) {
@@ -2034,6 +2039,11 @@ end:
 }
 #endif  /* CONFIG_AVFILTER */
 
+/**
+ * 音频解码线程
+ * @param arg
+ * @return
+ */
 static int audio_thread(void *arg)
 {
     VideoState *is = arg;
@@ -2052,7 +2062,7 @@ static int audio_thread(void *arg)
         return AVERROR(ENOMEM);
 
     do {
-        if ((got_frame = decoder_decode_frame(&is->auddec, frame, NULL)) < 0)
+        if ((got_frame = decoder_decode_frame(&is->auddec, frame, NULL)) < 0)//解码Packet到frame
             goto the_end;
 
         if (got_frame) {
@@ -2132,6 +2142,11 @@ static int decoder_start(Decoder *d, int (*fn)(void *), const char *thread_name,
     return 0;
 }
 
+/**
+ * 视频解码线程
+ * @param arg
+ * @return
+ */
 static int video_thread(void *arg)
 {
     VideoState *is = arg;
@@ -2239,6 +2254,11 @@ static int video_thread(void *arg)
     return 0;
 }
 
+/**
+ * 字幕解码线程
+ * @param arg
+ * @return
+ */
 static int subtitle_thread(void *arg)
 {
     VideoState *is = arg;
@@ -2633,7 +2653,7 @@ static int stream_component_open(VideoState *is, int stream_index)
         av_dict_set_int(&opts, "lowres", stream_lowres, 0);
     if (avctx->codec_type == AVMEDIA_TYPE_VIDEO || avctx->codec_type == AVMEDIA_TYPE_AUDIO)
         av_dict_set(&opts, "refcounted_frames", "1", 0);
-    if ((ret = avcodec_open2(avctx, codec, &opts)) < 0) {
+    if ((ret = avcodec_open2(avctx, codec, &opts)) < 0) {//启动解码线程
         goto fail;
     }
     if ((t = av_dict_get(opts, "", NULL, AV_DICT_IGNORE_SUFFIX))) {
@@ -2690,7 +2710,7 @@ static int stream_component_open(VideoState *is, int stream_index)
             is->auddec.start_pts = is->audio_st->start_time;
             is->auddec.start_pts_tb = is->audio_st->time_base;
         }
-        if ((ret = decoder_start(&is->auddec, audio_thread, "audio_decoder", is)) < 0)
+        if ((ret = decoder_start(&is->auddec, audio_thread, "audio_decoder", is)) < 0)//启动音频解码线程
             goto out;
         SDL_PauseAudioDevice(audio_dev, 0);
         break;
@@ -2777,19 +2797,19 @@ static int read_thread(void *arg)
     memset(st_index, -1, sizeof(st_index));
     is->eof = 0;
 
-    ic = avformat_alloc_context();
+    ic = avformat_alloc_context();//创建AVFormatContext对象
     if (!ic) {
         av_log(NULL, AV_LOG_FATAL, "Could not allocate context.\n");
         ret = AVERROR(ENOMEM);
         goto fail;
     }
-    ic->interrupt_callback.callback = decode_interrupt_cb;
+    ic->interrupt_callback.callback = decode_interrupt_cb;//添加IO中断回调
     ic->interrupt_callback.opaque = is;
     if (!av_dict_get(format_opts, "scan_all_pmts", NULL, AV_DICT_MATCH_CASE)) {
         av_dict_set(&format_opts, "scan_all_pmts", "1", AV_DICT_DONT_OVERWRITE);
         scan_all_pmts_set = 1;
     }
-    err = avformat_open_input(&ic, is->filename, is->iformat, &format_opts);
+    err = avformat_open_input(&ic, is->filename, is->iformat, &format_opts);//开启
     if (err < 0) {
         print_error(is->filename, err);
         ret = -1;
@@ -2859,8 +2879,10 @@ static int read_thread(void *arg)
     if (show_status)
         av_dump_format(ic, 0, is->filename, 0);
 
+    //遍历所有的流
     for (i = 0; i < ic->nb_streams; i++) {
         AVStream *st = ic->streams[i];
+        //编解码器类型
         enum AVMediaType type = st->codecpar->codec_type;
         st->discard = AVDISCARD_ALL;
         if (type >= 0 && wanted_stream_spec[type] && st_index[type] == -1)
@@ -2894,7 +2916,7 @@ static int read_thread(void *arg)
                                 NULL, 0);
 
     is->show_mode = show_mode;
-    if (st_index[AVMEDIA_TYPE_VIDEO] >= 0) {
+    if (st_index[AVMEDIA_TYPE_VIDEO] >= 0) {//有视频流
         AVStream *st = ic->streams[st_index[AVMEDIA_TYPE_VIDEO]];
         AVCodecParameters *codecpar = st->codecpar;
         AVRational sar = av_guess_sample_aspect_ratio(ic, st, NULL);
@@ -3077,7 +3099,8 @@ static VideoState *stream_open(const char *filename, AVInputFormat *iformat)
 {
     VideoState *is;
 
-    is = av_mallocz(sizeof(VideoState));//创建并初始化0
+    //创建并初始化VideoState
+    is = av_mallocz(sizeof(VideoState));
     if (!is)
         return NULL;
     is->last_video_stream = is->video_stream = -1;
@@ -3091,13 +3114,17 @@ static VideoState *stream_open(const char *filename, AVInputFormat *iformat)
     is->xleft   = 0;
 
     /* start video display */
+    //创建并初始化视频帧队列
     if (frame_queue_init(&is->pictq, &is->videoq, VIDEO_PICTURE_QUEUE_SIZE, 1) < 0)
         goto fail;
+    //创建并初始化字幕队列
     if (frame_queue_init(&is->subpq, &is->subtitleq, SUBPICTURE_QUEUE_SIZE, 0) < 0)
         goto fail;
+    //创建并初始化音频帧队列
     if (frame_queue_init(&is->sampq, &is->audioq, SAMPLE_QUEUE_SIZE, 1) < 0)
         goto fail;
 
+    //数据包队列初始化
     if (packet_queue_init(&is->videoq) < 0 ||
         packet_queue_init(&is->audioq) < 0 ||
         packet_queue_init(&is->subtitleq) < 0)
@@ -3108,23 +3135,30 @@ static VideoState *stream_open(const char *filename, AVInputFormat *iformat)
         goto fail;
     }
 
+    //初始化时钟
     init_clock(&is->vidclk, &is->videoq.serial);
     init_clock(&is->audclk, &is->audioq.serial);
     init_clock(&is->extclk, &is->extclk.serial);
     is->audio_clock_serial = -1;
-    if (startup_volume < 0)//起始音量 < 0。会被设置为0
+    //起始音量 < 0。会被设置为0
+    if (startup_volume < 0)
         av_log(NULL, AV_LOG_WARNING, "-volume=%d < 0, setting to 0\n", startup_volume);
-    if (startup_volume > 100)//>100, 会被设置为100
+    //>100, 会被设置为100
+    if (startup_volume > 100)
         av_log(NULL, AV_LOG_WARNING, "-volume=%d > 100, setting to 100\n", startup_volume);
     startup_volume = av_clip(startup_volume, 0, 100);
     startup_volume = av_clip(SDL_MIX_MAXVOLUME * startup_volume / 100, 0, SDL_MIX_MAXVOLUME);
     is->audio_volume = startup_volume;
     is->muted = 0;//不静音
+    //音视频同步类型，默认是AV_SYNC_AUDIO_MASTER
     is->av_sync_type = av_sync_type;
+    //创建拉流线程
     is->read_tid     = SDL_CreateThread(read_thread, "read_thread", is);
     if (!is->read_tid) {
+        //创建拉流线程失败，打印错误日志
         av_log(NULL, AV_LOG_FATAL, "SDL_CreateThread(): %s\n", SDL_GetError());
 fail:
+        //销毁创建的VideoState
         stream_close(is);
         return NULL;
     }
@@ -3228,20 +3262,39 @@ static void toggle_audio_display(VideoState *is)
     }
 }
 
+/**
+ * 刷新等待处理的事件
+ * @param is
+ * @param event
+ */
 static void refresh_loop_wait_event(VideoState *is, SDL_Event *event) {
     double remaining_time = 0.0;
+//    SDL_PumpEvents
+//    从输入设备中搜集事件，推动这些事件进入事件队列，更新事件队列的状态，不过它还有一个作用是进行视频子系统的设备状态更新，如果不调用这个函数，所显示的视频会在大约10秒后丢失色彩。没有调用SDL_PumpEvents，将不会有任何的输入设备事件进入队列，这种情况下，SDL就无法响应任何的键盘等硬件输入。
+//
+//    注意
+//    该函数只能在视频子系统的线程中调用，更加稳妥的做法，只应该在主线程中被调用
     SDL_PumpEvents();
+
+    //从事件队列头部取出1个事件
     while (!SDL_PeepEvents(event, 1, SDL_GETEVENT, SDL_FIRSTEVENT, SDL_LASTEVENT)) {
-        //没有SDL事件
+        //没有需要处理的SDL事件
+
+        //自动隐藏鼠标指针，当超过CURSOR_HIDE_DELAY时间没有移动鼠标时。
         if (!cursor_hidden && av_gettime_relative() - cursor_last_shown > CURSOR_HIDE_DELAY) {
+            //隐藏指针
             SDL_ShowCursor(0);
+            //设置指针隐藏状态标志变量为1，表明指针已经隐藏
             cursor_hidden = 1;
         }
+        //停留时间大于0
         if (remaining_time > 0.0)
+            //休眠remaining_time
             av_usleep((int64_t)(remaining_time * 1000000.0));
+        //休眠结束，重置remaining_time为一帧的显示时长
         remaining_time = REFRESH_RATE;
         if (is->show_mode != SHOW_MODE_NONE && (!is->paused || is->force_refresh))
-            video_refresh(is, &remaining_time);
+            video_refresh(is, &remaining_time);//显示视频
         SDL_PumpEvents();
     }
 }
@@ -3273,6 +3326,10 @@ static void seek_chapter(VideoState *is, int incr)
                                  AV_TIME_BASE_Q), 0, 0);
 }
 
+/**
+ * 启动事件循环。处理SDL_Event和音视频同步播放
+ * @param cur_stream
+ */
 /* handle an event sent by the GUI */
 static void event_loop(VideoState *cur_stream)
 {
@@ -3281,37 +3338,46 @@ static void event_loop(VideoState *cur_stream)
 
     for (;;) {
         double x;
+        //获取待处理事件
         refresh_loop_wait_event(cur_stream, &event);
+        //然后执行对事件的处理
         switch (event.type) {
         case SDL_KEYDOWN:
             if (exit_on_keydown || event.key.keysym.sym == SDLK_ESCAPE || event.key.keysym.sym == SDLK_q) {
+                //配置了按下任意键退出 || 按下Esc || 按下q。退出
                 do_exit(cur_stream);
                 break;
             }
             // If we don't yet have a window, skip all key events, because read_thread might still be initializing...
-            if (!cur_stream->width)
+            if (!cur_stream->width)//窗口还没显示，先不处理事件
                 continue;
             switch (event.key.keysym.sym) {
             case SDLK_f:
+                //按下f，切换全屏
                 toggle_full_screen(cur_stream);
                 cur_stream->force_refresh = 1;
                 break;
             case SDLK_p:
             case SDLK_SPACE:
+                //按下p || 按下space。暂停
                 toggle_pause(cur_stream);
                 break;
             case SDLK_m:
+                //按下m。切换静音
                 toggle_mute(cur_stream);
                 break;
             case SDLK_KP_MULTIPLY:
             case SDLK_0:
+                //按下0 或者 *。增加音量
                 update_volume(cur_stream, 1, SDL_VOLUME_STEP);
                 break;
             case SDLK_KP_DIVIDE:
             case SDLK_9:
+                //按下9 或者 /。减小音量
                 update_volume(cur_stream, -1, SDL_VOLUME_STEP);
                 break;
             case SDLK_s: // S: Step to next frame
+                //按下s，跳到下一帧
                 step_to_next_frame(cur_stream);
                 break;
             case SDLK_a:
@@ -3331,9 +3397,11 @@ static void event_loop(VideoState *cur_stream)
             case SDLK_w:
 #if CONFIG_AVFILTER
                 if (cur_stream->show_mode == SHOW_MODE_VIDEO && cur_stream->vfilter_idx < nb_vfilters - 1) {
+                    //切换过滤器
                     if (++cur_stream->vfilter_idx >= nb_vfilters)
                         cur_stream->vfilter_idx = 0;
                 } else {
+                    //切换模式
                     cur_stream->vfilter_idx = 0;
                     toggle_audio_display(cur_stream);
                 }
@@ -3342,10 +3410,12 @@ static void event_loop(VideoState *cur_stream)
 #endif
                 break;
             case SDLK_PAGEUP:
+                //只有一个视频，就向后跳10分钟
                 if (cur_stream->ic->nb_chapters <= 1) {
                     incr = 600.0;
                     goto do_seek;
                 }
+                //有多个视频，就跳到下一个视频
                 seek_chapter(cur_stream, 1);
                 break;
             case SDLK_PAGEDOWN:
@@ -3356,18 +3426,21 @@ static void event_loop(VideoState *cur_stream)
                 seek_chapter(cur_stream, -1);
                 break;
             case SDLK_LEFT:
+                //按照seek_interval 或者 10跳转到前面
                 incr = seek_interval ? -seek_interval : -10.0;
                 goto do_seek;
             case SDLK_RIGHT:
                 incr = seek_interval ? seek_interval : 10.0;
                 goto do_seek;
             case SDLK_UP:
+                //按照1分钟跳转
                 incr = 60.0;
                 goto do_seek;
             case SDLK_DOWN:
                 incr = -60.0;
             do_seek:
                     if (seek_by_bytes) {
+                        //根据字节数量跳转
                         pos = -1;
                         if (pos < 0 && cur_stream->video_stream >= 0)
                             pos = frame_queue_last_pos(&cur_stream->pictq);
@@ -3382,12 +3455,19 @@ static void event_loop(VideoState *cur_stream)
                         pos += incr;
                         stream_seek(cur_stream, pos, incr, 1);
                     } else {
+                        //根据时间来跳转
+
+                        //获取当前位置
                         pos = get_master_clock(cur_stream);
                         if (isnan(pos))
+                            //如果位置不是有效的
                             pos = (double)cur_stream->seek_pos / AV_TIME_BASE;
+                        //加上增量得到新位置
                         pos += incr;
                         if (cur_stream->ic->start_time != AV_NOPTS_VALUE && pos < cur_stream->ic->start_time / (double)AV_TIME_BASE)
+                            //不允许seek，在还没有启动的时候
                             pos = cur_stream->ic->start_time / (double)AV_TIME_BASE;
+                        //seek到指定时间
                         stream_seek(cur_stream, (int64_t)(pos * AV_TIME_BASE), (int64_t)(incr * AV_TIME_BASE), 0);
                     }
                 break;
@@ -3395,62 +3475,79 @@ static void event_loop(VideoState *cur_stream)
                 break;
             }
             break;
-        case SDL_MOUSEBUTTONDOWN:
+        case SDL_MOUSEBUTTONDOWN://鼠标按下
             if (exit_on_mousedown) {
+                //如果配置了exitonmousedown，就退出
                 do_exit(cur_stream);
                 break;
             }
             if (event.button.button == SDL_BUTTON_LEFT) {
+                //按下鼠标左键
                 static int64_t last_mouse_left_click = 0;
-                if (av_gettime_relative() - last_mouse_left_click <= 500000) {
+                if (av_gettime_relative() - last_mouse_left_click <= 500000) {// <= 500ms
+                    //双击鼠标左键，切换全屏和非全屏
                     toggle_full_screen(cur_stream);
-                    cur_stream->force_refresh = 1;
-                    last_mouse_left_click = 0;
+                    cur_stream->force_refresh = 1;//强制刷新
+                    last_mouse_left_click = 0;//重置last_mouse_left_click
                 } else {
+                    //第一次按下鼠标左键
                     last_mouse_left_click = av_gettime_relative();
                 }
             }
-        case SDL_MOUSEMOTION:
+        case SDL_MOUSEMOTION://鼠标右键按下和移动。执行seek
+            //移动鼠标事件
+
+            //当鼠标已经隐藏，需要重新显示鼠标
             if (cursor_hidden) {
                 SDL_ShowCursor(1);
                 cursor_hidden = 0;
             }
+            //更新鼠标最后一次显示的时间戳
             cursor_last_shown = av_gettime_relative();
             if (event.type == SDL_MOUSEBUTTONDOWN) {
                 if (event.button.button != SDL_BUTTON_RIGHT)
                     break;
+                //鼠标右键按下，记录当前鼠标的x坐标
                 x = event.button.x;
             } else {
                 if (!(event.motion.state & SDL_BUTTON_RMASK))
+                    //不是按下鼠标右键
                     break;
+                //按下鼠标右键并移动到的位置
                 x = event.motion.x;
             }
+
                 if (seek_by_bytes || cur_stream->ic->duration <= 0) {
+                    //当设置按字节去seek 或者 不知道视频总时长时，按照字节去seek
                     uint64_t size =  avio_size(cur_stream->ic->pb);
                     stream_seek(cur_stream, size*x/cur_stream->width, 0, 1);
                 } else {
+                    //
                     int64_t ts;
                     int ns, hh, mm, ss;
                     int tns, thh, tmm, tss;
-                    tns  = cur_stream->ic->duration / 1000000LL;
-                    thh  = tns / 3600;
-                    tmm  = (tns % 3600) / 60;
-                    tss  = (tns % 60);
+                    tns  = cur_stream->ic->duration / 1000000LL;//秒
+                    thh  = tns / 3600; //小时
+                    tmm  = (tns % 3600) / 60;//剩余分钟
+                    tss  = (tns % 60); //剩余秒
                     frac = x / cur_stream->width;
-                    ns   = frac * tns;
+                    ns   = frac * tns;//计算位置对应的时长
                     hh   = ns / 3600;
                     mm   = (ns % 3600) / 60;
                     ss   = (ns % 60);
                     av_log(NULL, AV_LOG_INFO,
                            "Seek to %2.0f%% (%2d:%02d:%02d) of total duration (%2d:%02d:%02d)       \n", frac*100,
-                            hh, mm, ss, thh, tmm, tss);
+                           hh, mm, ss, thh, tmm, tss);
                     ts = frac * cur_stream->ic->duration;
                     if (cur_stream->ic->start_time != AV_NOPTS_VALUE)
+                        //start_time配置有值，就进行需要+start_time来获取要seek到的时间点ts
                         ts += cur_stream->ic->start_time;
+                    //执行seek操作
                     stream_seek(cur_stream, ts, 0, 0);
                 }
             break;
         case SDL_WINDOWEVENT:
+            //窗口事件
             switch (event.window.event) {
                 case SDL_WINDOWEVENT_SIZE_CHANGED:
                     screen_width  = cur_stream->width  = event.window.data1;
@@ -3460,11 +3557,14 @@ static void event_loop(VideoState *cur_stream)
                         cur_stream->vis_texture = NULL;
                     }
                 case SDL_WINDOWEVENT_EXPOSED:
+                    //窗口被显露出来且必须被重画（这种情况一般是窗口被其他窗口挡住，然后被遮挡部分又显示出来时）
                     cur_stream->force_refresh = 1;
             }
             break;
         case SDL_QUIT:
+            //点击窗口关闭按钮
         case FF_QUIT_EVENT:
+            //视频播放结束
             do_exit(cur_stream);
             break;
         default:
@@ -3691,9 +3791,9 @@ int main(int argc, char **argv)
 
     /* register all codecs, demux and protocols */
 #if CONFIG_AVDEVICE
-    avdevice_register_all();
+    avdevice_register_all();//注册输入输出设备
 #endif
-    avformat_network_init();
+    avformat_network_init();//注册windows网络库和tls(openssl)库
 
     init_opts();
 
@@ -3702,9 +3802,9 @@ int main(int argc, char **argv)
 
     show_banner(argc, argv, options);
 
-    parse_options(NULL, argc, argv, options, opt_input_file);
+    parse_options(NULL, argc, argv, options, opt_input_file);//解析argv，获取input_filename
 
-    if (!input_filename) {
+    if (!input_filename) {//通过parse_options获取，如果发现没有指定要播放的文件，就打印使用帮助，结束程序
         show_usage();
         av_log(NULL, AV_LOG_FATAL, "An input file must be specified\n");
         av_log(NULL, AV_LOG_FATAL,
@@ -3716,29 +3816,29 @@ int main(int argc, char **argv)
         video_disable = 1;
     }
     flags = SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_TIMER;
-    if (audio_disable)
+    if (audio_disable)//静音
         flags &= ~SDL_INIT_AUDIO;
     else {
         /* Try to work around an occasional ALSA buffer underflow issue when the
          * period size is NPOT due to ALSA resampling by forcing the buffer size. */
-        if (!SDL_getenv("SDL_AUDIO_ALSA_SET_BUFFER_SIZE"))
+        if (!SDL_getenv("SDL_AUDIO_ALSA_SET_BUFFER_SIZE"))//ALSA: ALSA是Advanced Linux Sound Architecture 的缩写, 是Linux声卡的一种驱动框架
             SDL_setenv("SDL_AUDIO_ALSA_SET_BUFFER_SIZE","1", 1);
     }
-    if (display_disable)
+    if (display_disable)//不显示图像
         flags &= ~SDL_INIT_VIDEO;
-    if (SDL_Init (flags)) {//初始化 video，audio，timer
+    if (SDL_Init (flags)) {//初始化 SDL
         av_log(NULL, AV_LOG_FATAL, "Could not initialize SDL - %s\n", SDL_GetError());
         av_log(NULL, AV_LOG_FATAL, "(Did you set the DISPLAY variable?)\n");
         exit(1);
     }
 
-    SDL_EventState(SDL_SYSWMEVENT, SDL_IGNORE);//忽略事件
-    SDL_EventState(SDL_USEREVENT, SDL_IGNORE); //忽略事件
+    SDL_EventState(SDL_SYSWMEVENT, SDL_IGNORE);//从事件队列中丢弃事件
+    SDL_EventState(SDL_USEREVENT, SDL_IGNORE); //从事件队列中丢弃事件
 
-    av_init_packet(&flush_pkt);//初始化flush_pkt
-    flush_pkt.data = (uint8_t *)&flush_pkt;//data指针指向自身
+    av_init_packet(&flush_pkt);//初始化flush_pkt结构体变量
+    flush_pkt.data = (uint8_t *)&flush_pkt;//flush_pkt.data指针指向flush_pkt自身
 
-    if (!display_disable) {
+    if (!display_disable) {//显示图像
         int flags = SDL_WINDOW_HIDDEN;//隐藏窗口
         if (alwaysontop)//窗口总是在顶部
 #if SDL_VERSION_ATLEAST(2,0,5)
@@ -3750,31 +3850,44 @@ int main(int argc, char **argv)
             flags |= SDL_WINDOW_BORDERLESS;
         else
             flags |= SDL_WINDOW_RESIZABLE;//窗口可以调整大小
+
+            //创建窗口
         window = SDL_CreateWindow(program_name, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, default_width, default_height, flags);
-        SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "linear");
+        SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "linear");//设置缩放采用线性过滤
         if (window) {
+            //创建渲染器，并开启硬件加速和同步显示器刷新率
             renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
             if (!renderer) {
+                //渲染器创建失败，尝试关闭硬件加速和同步显示器刷新率后再次创建
                 av_log(NULL, AV_LOG_WARNING, "Failed to initialize a hardware accelerated renderer: %s\n", SDL_GetError());
                 renderer = SDL_CreateRenderer(window, -1, 0);
             }
             if (renderer) {
+                //渲染器创建成功
+
+                //获取渲染器信息
                 if (!SDL_GetRendererInfo(renderer, &renderer_info))
                     av_log(NULL, AV_LOG_VERBOSE, "Initialized %s renderer.\n", renderer_info.name);
             }
         }
         if (!window || !renderer || !renderer_info.num_texture_formats) {
+            //如果窗口或者渲染器创建失败，或者可用的纹理格式数量==0
             av_log(NULL, AV_LOG_FATAL, "Failed to create window or renderer: %s", SDL_GetError());
             do_exit(NULL);
         }
     }
 
+    //创建VideoState并启动拉流线程( read_thread )
     is = stream_open(input_filename, file_iformat);
     if (!is) {
+        //创建VideoState失败，或者是启动read_thread失败
         av_log(NULL, AV_LOG_FATAL, "Failed to initialize VideoState!\n");
         do_exit(NULL);
     }
 
+    /**
+     * 启动事件循环
+     */
     event_loop(is);
 
     /* never returns */

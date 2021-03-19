@@ -538,7 +538,7 @@ int avformat_open_input(AVFormatContext **ps, const char *filename,
     AVDictionary *tmp = NULL;
     ID3v2ExtraMeta *id3v2_extra_meta = NULL;
 
-    if (!s && !(s = avformat_alloc_context()))//未赋值，就在这里帮忙创建AVFormatContext
+    if (!s && !(s = avformat_alloc_context()))//AVFormatContext的对象ps未创建，就在这里帮忙创建AVFormatContext对象
         return AVERROR(ENOMEM);
     if (!s->av_class) {
         av_log(NULL, AV_LOG_ERROR, "Input context has not been properly allocated by avformat_alloc_context() and is not NULL either\n");
@@ -666,7 +666,7 @@ FF_ENABLE_DEPRECATION_WARNINGS
         av_dict_free(options);
         *options = tmp;
     }
-    *ps = s;
+    *ps = s;//将创建的对象地址赋值给外部的指针
     return 0;
 
 close:

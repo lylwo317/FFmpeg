@@ -138,7 +138,7 @@ void *av_realloc(void *ptr, size_t size)
 
 #if HAVE_ALIGNED_MALLOC
     return _aligned_realloc(ptr, size + !size, ALIGN);
-#else
+#else//size == 0的时候，分配1大小。size > 0时候，分配size大小
     return realloc(ptr, size + !size);
 #endif
 }
@@ -162,20 +162,20 @@ int av_reallocp(void *ptr, size_t size)
 {
     void *val;
 
-    if (!size) {
+    if (!size) {//size==0
         av_freep(ptr);
         return 0;
     }
 
-    memcpy(&val, ptr, sizeof(val));
-    val = av_realloc(val, size);
+    memcpy(&val, ptr, sizeof(val));//拷贝ptr指针变量值到val
+    val = av_realloc(val, size);//如果分配失败，需要自己free(ptr)，所以这也是为什么这里要用val，而不是ptr来操作的原因。
 
     if (!val) {
-        av_freep(ptr);
+        av_freep(ptr);//重新分配内存失败，free(ptr)
         return AVERROR(ENOMEM);
     }
 
-    memcpy(ptr, &val, sizeof(val));
+    memcpy(ptr, &val, sizeof(val));//将新的指针拷贝到原来的值
     return 0;
 }
 

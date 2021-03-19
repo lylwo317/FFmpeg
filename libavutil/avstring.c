@@ -37,9 +37,9 @@ int av_strstart(const char *str, const char *pfx, const char **ptr)
         pfx++;
         str++;
     }
-    if (!*pfx && ptr)
-        *ptr = str;
-    return !*pfx;
+    if (!*pfx && ptr)// !*pfx说明匹配到前缀了
+        *ptr = str;//将剔除前缀的部分赋值给ptr指针
+    return !*pfx;//返回!*pfx结果
 }
 
 int av_stristart(const char *str, const char *pfx, const char **ptr)

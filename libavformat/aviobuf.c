@@ -927,6 +927,7 @@ uint64_t ffio_read_varlen(AVIOContext *bc){
     return val;
 }
 
+//根据URLContext创建AVIOContext
 int ffio_fdopen(AVIOContext **s, URLContext *h)
 {
     uint8_t *buffer = NULL;

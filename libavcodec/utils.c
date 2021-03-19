@@ -733,7 +733,7 @@ int attribute_align_arg avcodec_open2(AVCodecContext *avctx, const AVCodec *code
 
     if (HAVE_THREADS
         && !(avci->frame_thread_encoder && (avctx->active_thread_type&FF_THREAD_FRAME))) {
-        ret = ff_thread_init(avctx);
+        ret = ff_thread_init(avctx);//创建线程
         if (ret < 0) {
             goto free_and_end;
         }
@@ -937,8 +937,8 @@ FF_ENABLE_DEPRECATION_WARNINGS
 
     ret=0;
 
-    if (av_codec_is_decoder(avctx->codec)) {
-        if (!avctx->bit_rate)
+    if (av_codec_is_decoder(avctx->codec)) {//编解码器是解码器
+        if (!avctx->bit_rate)//码率
             avctx->bit_rate = get_bit_rate(avctx);
         /* validate channel layout from the decoder */
         if (avctx->channel_layout) {
