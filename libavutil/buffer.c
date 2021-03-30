@@ -116,6 +116,7 @@ static void buffer_replace(AVBufferRef **dst, AVBufferRef **src)
     } else
         av_freep(dst);
 
+    //引用计数为1，说明这个是最后一个引用，需要进行free操作
     if (atomic_fetch_sub_explicit(&b->refcount, 1, memory_order_acq_rel) == 1) {
         b->free(b->opaque, b->data);
         av_freep(&b);

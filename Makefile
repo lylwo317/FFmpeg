@@ -1,6 +1,8 @@
 MAIN_MAKEFILE=1
 include ffbuild/config.mak #将ffbuild/config.mak在此处展开
-
+# vpath %.h ../headers
+# 该语句表示,要求 make 在“../headers”目录下搜索所有以“.h”结尾的文件。(如果某文件在当前目录没有找到的话)
+#$(warning "$(SRC_PATH)")
 vpath %.c    $(SRC_PATH) #如果%.c文件不能在当前目录下找到，就会到$(SRC_PATH)下搜索%.c
 vpath %.cpp  $(SRC_PATH)
 vpath %.h    $(SRC_PATH)
@@ -17,7 +19,23 @@ vpath %/fate_config.sh.template $(SRC_PATH)
 
 # = 与 :=区别在于展开的时机不同，:=立即展开，=在使用的时候展开
 TESTTOOLS   = audiogen videogen rotozoom tiny_psnr tiny_ssim base64 audiomatch
+#对TESTTOOLS中的%(“%”的意思是匹配零或若干字符)，进行替换添加tests/前缀
 HOSTPROGS  := $(TESTTOOLS:%=tests/%) doc/print_options
+#HOSTPROGS = "tests/audiogen tests/videogen tests/rotozoom tests/tiny_psnr tests/tiny_ssim tests/base64 tests/audiomatch doc/print_options"
+# $(warning "$(HOSTPROGS)")
+
+# := 使用
+# x := foo
+# y := $(x) bar
+# x := later
+# 其等价于:
+# y := foo bar
+# x := later
+# 这种方法,前面的变量不能使用后面的变量,只能使用前面已定义好了的变
+# 量。如果是这样:
+# y := $(x) bar
+# x := foo
+# 那么,y 的值是“bar”,而不是“foo bar”。
 
 # $(FFLIBS-yes) needs to be in linking order
 # $(CONFIG_xxxxx)在configure运行的时候生成到ffbuild/config.mak，然后如果enable，就yes，否则就no

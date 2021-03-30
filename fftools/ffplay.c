@@ -78,9 +78,9 @@ const int program_birth_year = 2003;//程序创建的日期
 #define SDL_VOLUME_STEP (0.75)
 
 /* no AV sync correction is done if below the minimum AV sync threshold */
-#define AV_SYNC_THRESHOLD_MIN 0.04
+#define AV_SYNC_THRESHOLD_MIN 0.04// 40ms
 /* AV sync correction is done if above the maximum AV sync threshold */
-#define AV_SYNC_THRESHOLD_MAX 0.1
+#define AV_SYNC_THRESHOLD_MAX 0.1// 100ms
 /* If a frame duration is longer than this, it will not be duplicated to compensate AV sync */
 #define AV_SYNC_FRAMEDUP_THRESHOLD 0.1
 /* no AV correction is done if too big error */
@@ -98,7 +98,7 @@ const int program_birth_year = 2003;//程序创建的日期
 #define AUDIO_DIFF_AVG_NB   20
 
 /* polls for possible required screen refresh at least this often, should be less than 1/fps */
-#define REFRESH_RATE 0.01
+#define REFRESH_RATE 0.01 // ms = 0.01 * 1000 = 10ms，60帧的视频，就16ms一帧。
 
 /* NOTE: the size must be big enough to compensate the hardware audio buffersize size */
 /* TODO: We assume that a decoded and resampled frame fits into this buffer */
@@ -116,12 +116,19 @@ typedef struct MyAVPacketList {//链表
     int serial;
 } MyAVPacketList;
 
+//循环队列，其中存放加入进来的Packet
 typedef struct PacketQueue {
+    //头节点指针指针, 尾节点指针
     MyAVPacketList *first_pkt, *last_pkt;
+    //总共读取的Packet包数
     int nb_packets;
+    //当前队列中的Packet占用的空间大小，包含指向的空间和本身的空间
     int size;
+    //当前队列中的packet的播放总时间
     int64_t duration;
+    //中止请求
     int abort_request;
+    //序列号，快进，快退，循环从头播放都会导致序列号加一。即一次连续播放的编号，每开始一次连续的播放都有唯一的序列号
     int serial;
     SDL_mutex *mutex;
     SDL_cond *cond;
@@ -133,11 +140,15 @@ typedef struct PacketQueue {
 #define FRAME_QUEUE_SIZE FFMAX(SAMPLE_QUEUE_SIZE, FFMAX(VIDEO_PICTURE_QUEUE_SIZE, SUBPICTURE_QUEUE_SIZE))
 
 typedef struct AudioParams {
+    //采样率
     int freq;
+    //通道数
     int channels;
     int64_t channel_layout;
     enum AVSampleFormat fmt;
+    //单个样本占用的大小。比如双通道16位占用4字节
     int frame_size;
+    //每秒的数据量，采样率*单个样本(freq*frame_size)的大小，比如48000*4=192000
     int bytes_per_sec;
 } AudioParams;
 
@@ -155,28 +166,40 @@ typedef struct Clock {//时钟
 typedef struct Frame {
     AVFrame *frame;
     AVSubtitle sub;
+    //序列号，快进，快退，循环从头播放都会导致序列号加一。即一次连续播放的编号，每开始一次连续的播放都有唯一的序列号
     int serial;
     double pts;           /* presentation timestamp for the frame */
     double duration;      /* estimated duration of the frame */
     int64_t pos;          /* byte position of the frame in the input file */
     int width;
     int height;
+    //
     int format;
+    //视频帧宽高比例sample_aspect_ratio
     AVRational sar;
+    //载入到纹理
     int uploaded;
     int flip_v;
 } Frame;
 
+//环形缓冲区
 typedef struct FrameQueue {
     Frame queue[FRAME_QUEUE_SIZE];
+    //是读帧数据索引(readIndex)， 相当于是队列的队首
     int rindex;
+    //是写帧数据索引(writeIndex)， 相当于是队列的队尾
     int windex;
+    //是存储在这个队列的Frame的数量
     int size;
+    //是可以存储Frame的最大数量
     int max_size;
+    //用来判断队列是否保留正在显示的帧(Frame)
     int keep_last;
+    //表示当前是否有帧在显示
     int rindex_shown;
     SDL_mutex *mutex;
     SDL_cond *cond;
+    //指向各自数据包(ES包)的队列
     PacketQueue *pktq;
 } FrameQueue;
 
@@ -204,33 +227,40 @@ typedef struct Decoder {
 typedef struct VideoState {
     SDL_Thread *read_tid;//read_thread_pointer。读取线程
     AVInputFormat *iformat;
+    //是否要中断文件读取
     int abort_request;
     int force_refresh;
     int paused;
     int last_paused;
     int queue_attachments_req;
+    //是否要进行seek的请求标志，进行seek之前会设置为1，seek一次后会自动设置为0
     int seek_req;
+    //seek的方式，按字节或者按时间
     int seek_flags;
+    //要seek到的位置，单位微秒或者字节数（要看seek的方式）
     int64_t seek_pos;
+    //当前位置和要seek到的位置的距离，单位微秒或者字节数（要看seek的方式）
     int64_t seek_rel;
+    //暂停读取流返回的错误码
     int read_pause_return;
+    //读取文件流的AVFormatContext上下文
     AVFormatContext *ic;
+    //是否是实时流
     int realtime;
 
     Clock audclk;//音频时钟
     Clock vidclk;//视频时钟
     Clock extclk;//外部时钟
 
-    FrameQueue pictq;//图像队列
-    FrameQueue subpq;//字幕队列
-    FrameQueue sampq;//音频队列
+    FrameQueue pictq;//视频帧队列，解码后的数据
+    FrameQueue subpq;//字幕队列，解码后的数据
+    FrameQueue sampq;//音频帧队列，解码后的数据
 
     Decoder auddec;
     Decoder viddec;
     Decoder subdec;//字幕
 
-    int audio_stream;
-
+    //音视频的同步方式
     int av_sync_type;
 
     double audio_clock;
@@ -239,21 +269,30 @@ typedef struct VideoState {
     double audio_diff_avg_coef;
     double audio_diff_threshold;
     int audio_diff_avg_count;
+    //音频流的流索引号
+    int audio_stream;
     AVStream *audio_st;
     PacketQueue audioq;
+    //打开音频设备成功后，返回的buffer大小
     int audio_hw_buf_size;
     uint8_t *audio_buf;
     uint8_t *audio_buf1;
+    /* 已经解码出的音频数据的数据量 */
     unsigned int audio_buf_size; /* in bytes */
     unsigned int audio_buf1_size;
+    /* 已经放入播放设备缓存的数据量 */
     int audio_buf_index; /* in bytes */
+    //解码出的数据尚未放入设备缓存的数据量，也即待写入的数据量
     int audio_write_buf_size;
+    //设置音量
     int audio_volume;
     int muted;
+    //源音频参数
     struct AudioParams audio_src;
 #if CONFIG_AVFILTER
     struct AudioParams audio_filter_src;
 #endif
+    //目标音频参数
     struct AudioParams audio_tgt;
     struct SwrContext *swr_ctx;
     int frame_drops_early;
@@ -275,23 +314,28 @@ typedef struct VideoState {
     SDL_Texture *sub_texture;
     SDL_Texture *vid_texture;
 
+    //字幕流的流索引号
     int subtitle_stream;
     AVStream *subtitle_st;
     PacketQueue subtitleq;
 
+    //记录当前帧实际播放到的时间
     double frame_timer;
     double frame_last_returned_time;
     double frame_last_filter_delay;
+    //视频流的流索引号
     int video_stream;
     AVStream *video_st;
     PacketQueue videoq;
     double max_frame_duration;      // maximum duration of a frame - above this, we consider the jump a timestamp discontinuity
     struct SwsContext *img_convert_ctx;
     struct SwsContext *sub_convert_ctx;
+    //是否到文件结尾
     int eof;
 
     char *filename;
     int width, height, xleft, ytop;
+    //步进的标志，进行步进操作，按键盘S就是步进操作
     int step;
 
 #if CONFIG_AVFILTER
@@ -305,6 +349,7 @@ typedef struct VideoState {
 
     int last_video_stream, last_audio_stream, last_subtitle_stream;
 
+    //读线程的条件变量
     SDL_cond *continue_read_thread;
 } VideoState;
 
@@ -706,7 +751,7 @@ static int frame_queue_init(FrameQueue *f, PacketQueue *pktq, int max_size, int 
     }
     f->pktq = pktq;
     f->max_size = FFMIN(max_size, FRAME_QUEUE_SIZE);
-    f->keep_last = !!keep_last;
+    f->keep_last = !!keep_last;//keep_last != 0
     for (i = 0; i < f->max_size; i++)
         if (!(f->queue[i].frame = av_frame_alloc()))
             return AVERROR(ENOMEM);
@@ -1608,15 +1653,18 @@ retry:
             Frame *vp, *lastvp;
 
             /* dequeue the picture */
-            lastvp = frame_queue_peek_last(&is->pictq);
-            vp = frame_queue_peek(&is->pictq);
+            lastvp = frame_queue_peek_last(&is->pictq);//获取最后播放的一帧
+            vp = frame_queue_peek(&is->pictq);//当前要播放的帧
 
+            //解码帧序列与当前读取的PacketQueue不是同一个序列
             if (vp->serial != is->videoq.serial) {
                 frame_queue_next(&is->pictq);
                 goto retry;
             }
 
+            //上一帧与当前要播放的帧不是同一个序列
             if (lastvp->serial != vp->serial)
+                //刷新frame_timer
                 is->frame_timer = av_gettime_relative() / 1000000.0;
 
             if (is->paused)
@@ -1627,6 +1675,7 @@ retry:
             delay = compute_target_delay(last_duration, is);
 
             time= av_gettime_relative()/1000000.0;
+            //还没到要显示的时间
             if (time < is->frame_timer + delay) {
                 *remaining_time = FFMIN(is->frame_timer + delay - time, *remaining_time);
                 goto display;
@@ -1749,6 +1798,16 @@ display:
     }
 }
 
+/**
+ * 视频解码线程向视频frame_queue中写入一帧
+ * @param is
+ * @param src_frame
+ * @param pts
+ * @param duration
+ * @param pos
+ * @param serial
+ * @return
+ */
 static int queue_picture(VideoState *is, AVFrame *src_frame, double pts, double duration, int64_t pos, int serial)
 {
     Frame *vp;
@@ -3268,12 +3327,15 @@ static void toggle_audio_display(VideoState *is)
  * @param event
  */
 static void refresh_loop_wait_event(VideoState *is, SDL_Event *event) {
-    double remaining_time = 0.0;
+    double remaining_time = 0.0;// second
+
 //    SDL_PumpEvents
 //    从输入设备中搜集事件，推动这些事件进入事件队列，更新事件队列的状态，不过它还有一个作用是进行视频子系统的设备状态更新，如果不调用这个函数，所显示的视频会在大约10秒后丢失色彩。没有调用SDL_PumpEvents，将不会有任何的输入设备事件进入队列，这种情况下，SDL就无法响应任何的键盘等硬件输入。
 //
 //    注意
 //    该函数只能在视频子系统的线程中调用，更加稳妥的做法，只应该在主线程中被调用
+
+    //事件抽水泵
     SDL_PumpEvents();
 
     //从事件队列头部取出1个事件
