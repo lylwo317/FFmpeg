@@ -82,9 +82,9 @@ const int program_birth_year = 2003;//程序创建的日期
 /* AV sync correction is done if above the maximum AV sync threshold */
 #define AV_SYNC_THRESHOLD_MAX 0.1// 100ms
 /* If a frame duration is longer than this, it will not be duplicated to compensate AV sync */
-#define AV_SYNC_FRAMEDUP_THRESHOLD 0.1
+#define AV_SYNC_FRAMEDUP_THRESHOLD 0.1// 100ms
 /* no AV correction is done if too big error */
-#define AV_NOSYNC_THRESHOLD 10.0
+#define AV_NOSYNC_THRESHOLD 10.0//10s
 
 /* maximum audio speed change to get correct sync */
 #define SAMPLE_CORRECTION_PERCENT_MAX 10
@@ -153,8 +153,11 @@ typedef struct AudioParams {
 } AudioParams;
 
 typedef struct Clock {//时钟
+    //上一帧的pts
     double pts;           /* clock base */
+    //pts - last_updated，表示的pts对比系统时钟的偏移量
     double pts_drift;     /* clock base minus time at which we updated the clock */
+    //上一次更新Clock的时间
     double last_updated;
     double speed;
     int serial;           /* clock is based on a packet with this serial */
@@ -319,7 +322,7 @@ typedef struct VideoState {
     AVStream *subtitle_st;
     PacketQueue subtitleq;
 
-    //记录当前帧实际播放到的时间
+    //记录当前帧实际播放到的时间, 单位秒（s）
     double frame_timer;
     double frame_last_returned_time;
     double frame_last_filter_delay;
@@ -334,6 +337,7 @@ typedef struct VideoState {
     int eof;
 
     char *filename;
+    //窗口宽度，窗口高度
     int width, height, xleft, ytop;
     //步进的标志，进行步进操作，按键盘S就是步进操作
     int step;
@@ -787,6 +791,11 @@ static Frame *frame_queue_peek_next(FrameQueue *f)
     return &f->queue[(f->rindex + f->rindex_shown + 1) % f->max_size];
 }
 
+/**
+ * 获取最后播放的一帧
+ * @param f
+ * @return
+ */
 static Frame *frame_queue_peek_last(FrameQueue *f)
 {
     return &f->queue[f->rindex];
@@ -1394,6 +1403,7 @@ static int video_open(VideoState *is)
     w = screen_width ? screen_width : default_width;
     h = screen_height ? screen_height : default_height;
 
+    //窗口标题
     if (!window_title)
         window_title = input_filename;
     SDL_SetWindowTitle(window, window_title);
@@ -1413,18 +1423,28 @@ static int video_open(VideoState *is)
 /* display the current picture, if any */
 static void video_display(VideoState *is)
 {
+    //视频宽度为0
     if (!is->width)
         video_open(is);
 
+    //设置清屏色，为黑色
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+    //清屏
     SDL_RenderClear(renderer);
     if (is->audio_st && is->show_mode != SHOW_MODE_VIDEO)
         video_audio_display(is);
     else if (is->video_st)
+        //显示视频图像
         video_image_display(is);
+    //使用渲染器更新屏幕
     SDL_RenderPresent(renderer);
 }
 
+/**
+ * 获取现在的pts
+ * @param c
+ * @return
+ */
 static double get_clock(Clock *c)
 {
     if (*c->queue_serial != c->serial)
@@ -1433,6 +1453,7 @@ static double get_clock(Clock *c)
         return c->pts;
     } else {
         double time = av_gettime_relative() / 1000000.0;
+        //last_pts  - startTime + time = cur_pts, cur_pts + (pass_time * (speed - 1)) = cur_pts_with_speed
         return c->pts_drift + time - (time - c->last_updated) * (1.0 - c->speed);
     }
 }
@@ -1576,6 +1597,12 @@ static void step_to_next_frame(VideoState *is)
     is->step = 1;
 }
 
+/**
+ * 调整delay时间
+ * @param delay
+ * @param is
+ * @return
+ */
 static double compute_target_delay(double delay, VideoState *is)
 {
     double sync_threshold, diff = 0;
@@ -1584,20 +1611,25 @@ static double compute_target_delay(double delay, VideoState *is)
     if (get_master_sync_type(is) != AV_SYNC_VIDEO_MASTER) {
         /* if video is slave, we try to correct big delays by
            duplicating or deleting a frame */
+        //diff = 视频时钟last_pts - 音频时钟last_pts
         diff = get_clock(&is->vidclk) - get_master_clock(is);
 
         /* skip or repeat frame. We take into account the
            delay to compute the threshold. I still don't know
            if it is the best guess */
+        //帧间距时间大于40，小于100ms，才需要同步
+        // 若delay < AV_SYNC_THRESHOLD_MIN，则同步域值为AV_SYNC_THRESHOLD_MIN
+        // 若delay > AV_SYNC_THRESHOLD_MAX，则同步域值为AV_SYNC_THRESHOLD_MAX
+        // 若AV_SYNC_THRESHOLD_MIN < delay < AV_SYNC_THRESHOLD_MAX，则同步域值为delay
         sync_threshold = FFMAX(AV_SYNC_THRESHOLD_MIN, FFMIN(AV_SYNC_THRESHOLD_MAX, delay));
-        if (!isnan(diff) && fabs(diff) < is->max_frame_duration) {
-            if (diff <= -sync_threshold)
-                delay = FFMAX(0, delay + diff);
-            else if (diff >= sync_threshold && delay > AV_SYNC_FRAMEDUP_THRESHOLD)
-                delay = delay + diff;
+        if (!isnan(diff) && fabs(diff) < is->max_frame_duration) {//diff是有效数字，并且小于最大帧间距
+            if (diff <= -sync_threshold)//说明视频比音频时钟迟了(一帧或者多帧的时候，直接播放。如果是帧间距大于100ms，就需要等待delay + diff)，就需要追赶音频时钟。
+                delay = FFMAX(0, delay + diff);//减去abs(diff)，如果小于0，说明已经小于帧间距，这里就立即显示下一帧视频帧来追赶
+            else if (diff >= sync_threshold && delay > AV_SYNC_FRAMEDUP_THRESHOLD)//说明帧间距大于100ms
+                delay = delay + diff;//视频时钟超过了音频时钟，并且frame_duration > 100ms，这里就让视频帧等待 frame_duration + diff 时长
             else if (diff >= sync_threshold)
-                delay = 2 * delay;
-        }
+                delay = 2 * delay;//视频时钟超过了音频时钟，并且frame_duration <= 100ms，这里就让视频帧等待 2 * frame_duration
+        }//除了上面需要delay调整，其它都按默认delay处理
     }
 
     av_log(NULL, AV_LOG_TRACE, "video: delay=%0.3f A-V=%f\n",
@@ -1635,6 +1667,7 @@ static void video_refresh(void *opaque, double *remaining_time)
     if (!is->paused && get_master_sync_type(is) == AV_SYNC_EXTERNAL_CLOCK && is->realtime)
         check_external_clock_speed(is);
 
+    //处理不是正常播放模式
     if (!display_disable && is->show_mode != SHOW_MODE_VIDEO && is->audio_st) {
         time = av_gettime_relative() / 1000000.0;
         if (is->force_refresh || is->last_vis_time + rdftspeed < time) {
@@ -1653,7 +1686,7 @@ retry:
             Frame *vp, *lastvp;
 
             /* dequeue the picture */
-            lastvp = frame_queue_peek_last(&is->pictq);//获取最后播放的一帧
+            lastvp = frame_queue_peek_last(&is->pictq);
             vp = frame_queue_peek(&is->pictq);//当前要播放的帧
 
             //解码帧序列与当前读取的PacketQueue不是同一个序列
@@ -1671,17 +1704,20 @@ retry:
                 goto display;
 
             /* compute nominal last_duration */
+            //计算两帧的pts差值 lastvp->pts - vp->pts = last_duration
             last_duration = vp_duration(is, lastvp, vp);
             delay = compute_target_delay(last_duration, is);
 
             time= av_gettime_relative()/1000000.0;
             //还没到要显示的时间
-            if (time < is->frame_timer + delay) {
+            if (time < is->frame_timer + delay) {//就sleep等待
+                //如果小于10ms，就取is->frame_timer + delay - time
                 *remaining_time = FFMIN(is->frame_timer + delay - time, *remaining_time);
                 goto display;
             }
 
             is->frame_timer += delay;
+            //frame_timer小于time超过100ms，就重置frame_timer
             if (delay > 0 && time - is->frame_timer > AV_SYNC_THRESHOLD_MAX)
                 is->frame_timer = time;
 
@@ -1695,6 +1731,7 @@ retry:
                 duration = vp_duration(is, vp, nextvp);
                 if(!is->step && (framedrop>0 || (framedrop && get_master_sync_type(is) != AV_SYNC_VIDEO_MASTER)) && time > is->frame_timer + duration){
                     is->frame_drops_late++;
+                    //丢弃vp
                     frame_queue_next(&is->pictq);
                     goto retry;
                 }
@@ -1734,7 +1771,9 @@ retry:
                     }
             }
 
+            //移动到下一帧
             frame_queue_next(&is->pictq);
+            //确定要渲染该帧
             is->force_refresh = 1;
 
             if (is->step && !is->paused)
@@ -3173,7 +3212,7 @@ static VideoState *stream_open(const char *filename, AVInputFormat *iformat)
     is->xleft   = 0;
 
     /* start video display */
-    //创建并初始化视频帧队列
+    //创建并初始化视频帧队列，并且keep_last这样可以对比前后帧的时间差以及是不是同一个序列
     if (frame_queue_init(&is->pictq, &is->videoq, VIDEO_PICTURE_QUEUE_SIZE, 1) < 0)
         goto fail;
     //创建并初始化字幕队列
@@ -3330,7 +3369,9 @@ static void refresh_loop_wait_event(VideoState *is, SDL_Event *event) {
     double remaining_time = 0.0;// second
 
 //    SDL_PumpEvents
-//    从输入设备中搜集事件，推动这些事件进入事件队列，更新事件队列的状态，不过它还有一个作用是进行视频子系统的设备状态更新，如果不调用这个函数，所显示的视频会在大约10秒后丢失色彩。没有调用SDL_PumpEvents，将不会有任何的输入设备事件进入队列，这种情况下，SDL就无法响应任何的键盘等硬件输入。
+//    从输入设备中搜集事件，推动这些事件进入事件队列，更新事件队列的状态，不过它还有一个作用是进行视频子系统的设备状态更新，
+//    如果不调用这个函数，所显示的视频会在大约10秒后丢失色彩。没有调用SDL_PumpEvents，将不会有任何的输入设备事件进入队列，
+//    这种情况下，SDL就无法响应任何的键盘等硬件输入。
 //
 //    注意
 //    该函数只能在视频子系统的线程中调用，更加稳妥的做法，只应该在主线程中被调用

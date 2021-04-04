@@ -53,6 +53,10 @@ int64_t av_gettime(void)
 #endif
 }
 
+/**
+ * 获取系统启动后的us
+ * @return
+ */
 int64_t av_gettime_relative(void)
 {
 #if HAVE_CLOCK_GETTIME && defined(CLOCK_MONOTONIC)
